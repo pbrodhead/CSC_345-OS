@@ -2,11 +2,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-int len = 7;
-int nums[7] = {90, 81, 78, 95, 79, 72, 85};
+int len;
+int * nums;
 int r_min;
 int r_max;
-int r_avg;
+double r_avg;
 
 void * myMin(void * param){
     int i;
@@ -42,6 +42,11 @@ int main(int argc, char** argv){
     pthread_t tid2;
     pthread_t tid3;
     
+    nums = (int *) malloc(sizeof(int) * (argc - 1));
+    len = argc - 1;
+    for (int i = 0; i < (argc - 1); i++)
+        nums[i] = atoi(argv[i + 1]);
+    
     pthread_create(&tid1, 0, myMin, NULL);
     pthread_create(&tid2, 0, myMax, NULL);
     pthread_create(&tid3, 0, myAvg, NULL);
@@ -52,7 +57,7 @@ int main(int argc, char** argv){
     
     printf("Min = %d\n", r_min);
     printf("Max = %d\n", r_max);
-    printf("Avg = %d\n", r_avg);
+    printf("Avg = %f\n", r_avg);
     
     return 0;
 }
