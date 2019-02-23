@@ -26,14 +26,17 @@ int main(void){
     char *token;          //string used in arg parsing
     const char s[2] = " ";//comparator for arg parsing
     int should_run = 1;   //flag to determine when to exit
-    pid_t pid;            //process ID
-    int background = 0;   //bool to determine if parent waits
-    char *hist = " ";     //string containing previous args
+    pid_t pid, pid_pipe;  //process ID
+    int background;       //bool to determine if parent waits
+    int pipe_flag;        //bool to determine if pipe used
+    //string containing previous args
+    char *hist = "No recent command in history";
     char *command;        //final args to be parsed
     int in, out;          //bool to determine file redirection
     int fdin, fdout;      //file read/write vars
     int numArgs;          
     int len;              //length of user input
+    int fd[2];            //pipe var
     
     /* shell loop */
     while(should_run){
@@ -43,6 +46,8 @@ int main(void){
         numArgs = 0;
         in = 0;
         out = 0;
+        background = 0;
+        pipe_flag = 0;
         
         /* retrieve user input & input len */
         fgets(temp,MAX_LINE,stdin);
@@ -67,8 +72,14 @@ int main(void){
         token = strtok(command, s);
         while(token != NULL){
             args[numArgs] = token;
-            if(!strcmp(token,"&"))
+            /* background process handling */
+            if(!strcmp(token,"&")){
                 background = 1;
+                args[numArgs] = '\0';
+            }
+            /* pipe handling */
+            if(!strcmp(token,"|"))
+                pipe_flag = numArgs;
             token = strtok(NULL, s);
             numArgs++;
         }
@@ -101,7 +112,7 @@ int main(void){
         
         /* fork parent and child processes */
         pid = fork();
-        if(pid == 0){   //CHILD
+        if(pid == 0){   //CHILD 1
             /* command input redirection */
             if(in){
                 args[numArgs - 2] = NULL;   //remove "<" char
@@ -129,7 +140,37 @@ int main(void){
                 close(fdout);
             }
             
-            execvp(args[0],args);   //change child process to arg
+            /* pipe */
+            if(pipe_flag > 0){
+                /* pipe creation & error handling */
+                if(pipe(fd) < 0){
+                    printf("Failed to create pipe");
+                    exit(1);
+                }
+                
+                pid_pipe = fork();
+                if(pid_pipe == 0){ //pipe child
+                    /* redirect STDOUT to pipe */
+                    dup2(fd[1],STDOUT_FILENO);
+                    args[pipe_flag] = '\0';
+                    close(fd[0]);
+                    
+                    /* execute first arg */
+                    execvp(args[0],args);
+                }
+                else{              //pipe parent
+                    wait(NULL);
+                    
+                    /* redirect STDIN to pipe */
+                    dup2(fd[0],STDIN_FILENO);
+                    close(fd[1]);
+                    
+                    /* execute args after | */
+                    execvp(args[pipe_flag + 1], &args[pipe_flag + 1]);
+                }
+            }
+            else
+                execvp(args[0],args); //change child process to arg
         }
         else if(pid > 0){   //PARENT
             /* background process handling */
