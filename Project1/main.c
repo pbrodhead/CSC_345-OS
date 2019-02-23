@@ -56,8 +56,10 @@ int main(void){
             temp[len - 1] = '\0'; 
         
         /* check for history command, and prep proper arg */
-        if(strcmp(temp,"!!") == 0)
+        if(strcmp(temp,"!!") == 0){
             command = hist;
+            printf("%s\n",hist);
+        }
         else
             command = temp;
         
