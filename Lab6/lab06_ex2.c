@@ -21,39 +21,76 @@ typedef struct _FARMER{
 pthread_mutex_t t;
 pthread_cond_t  c;
 
-void enter_bridge(){
-    pthread_cond_wait(&c, &t);
-    pthread_cond_signal(&c);
+int num_waiting_north = 0;
+int num_waiting_south = 0;
+int prev = 0; //0 for north, 1 for south
+int on_bridge = 0;
+
+void enter_bridge_north(){
+    ++num_waiting_north;
+    pthread_mutex_lock(&t);
+    while ((on_bridge == 1) || (prev == 0 && num_waiting_south > 0)){
+        pthread_cond_wait(&c, &t);
+    }
+    pthread_mutex_unlock(&t);
+    --num_waiting_north;
+    prev = 0;
+    on_bridge = 1;
 }
 
-void exit_bridge(){
+void enter_bridge_south(){
+    ++num_waiting_south;
+    pthread_mutex_lock(&t);
+    while ((on_bridge == 0) || (prev == 1 && num_waiting_north > 0)){
+        pthread_cond_wait(&c, &t);
+    }
+    pthread_mutex_unlock(&t);
+    --num_waiting_south;
+    prev = 1;
+    on_bridge = 1;
+}
+
+void exit_bridge_north(){
+    on_bridge = 0;
+    pthread_cond_broadcast(&c);
+}
+
+void exit_bridge_south(){
+    on_bridge = 0;
     pthread_cond_broadcast(&c);
 }
 
 void* pass_bridge(void* param){
     FARMER* f = (FARMER*) param;
 
-    if(f->isNorth)
+    if(f->isNorth){
+        enter_bridge_north();
         printf("Northbound farmer %d will pass in %d seconds\n",
             f->idx, f->waitfor);
-    else
+    }
+    else{
+        enter_bridge_south();
         printf("Southbound farmer %d will pass in %d seconds\n",
             f->idx, f->waitfor);
-
-    enter_bridge();
+    }
+    
+    
     if(f->isNorth)
         printf(" Northbound farmer %d is on bridge...\n", f->idx);
     else    
         printf(" Southbound farmer %d is on bridge...\n", f->idx);
     sleep(f -> waitfor);
     
-    exit_bridge();
-    if(f->isNorth)
+    if(f->isNorth){
+        exit_bridge_north();
         printf("Northbound farmer %d crossed in %d seconds\n",
             f->idx, f->waitfor);
-    else
+    }
+    else{
+        exit_bridge_south();
         printf("Southbound farmer %d crossed in %d seconds\n",
             f->idx, f->waitfor);
+    }
 
     pthread_exit(0);
 }
@@ -66,9 +103,10 @@ int main(int argc, char** argv){
     total_north = atoi(argv[1]);
     total_south = atoi(argv[2]);
     
-    printf("%d northbound farmers, %d southbound farmers",
+    printf("%d northbound farmers, %d southbound farmers\n",
         total_north, total_south);
     
+    pthread_mutex_init(&t,NULL);
     pthread_cond_init(&c,NULL);
     
     farmerN = (FARMER*)malloc(sizeof(FARMER) * total_north);
